@@ -136,13 +136,46 @@
       summaryBody: document.getElementById('summaryBody'),
       sumField: document.getElementById('sumField'),
       sumRisk: document.getElementById('sumRisk'),
+      chartGrid: document.querySelector('.chart-grid')
     };
+
+    // Add missing UI blocks without changing the existing visual language.
+    if (!document.getElementById('classChart')) {
+      const chart3Card = document.createElement('article');
+      chart3Card.className = 'chart-card';
+      chart3Card.innerHTML = `
+        <h3>Avg Pressure by Field and Weed Class (Top 25)</h3>
+        <canvas id="classChart" height="315"></canvas>
+      `;
+      els.chartGrid.appendChild(chart3Card);
+    }
+
+    if (!document.getElementById('recordsTableBody')) {
+      const tableCard = document.createElement('article');
+      tableCard.className = 'chart-card';
+      tableCard.style.marginTop = '14px';
+      tableCard.innerHTML = `
+        <h3>Field Ranking Table (Filtered)</h3>
+        <div style="overflow:auto;max-height:340px;border:1px solid #e8edf8;border-radius:10px;">
+          <table class="trend-table" id="recordsTable" style="min-width:780px;">
+            <thead><tr><th>Field</th><th>Farm</th><th>Avg PS</th><th>WRS</th><th>High %</th><th>Records</th><th>Action</th></tr></thead>
+            <tbody id="recordsTableBody"></tbody>
+          </table>
+        </div>
+      `;
+      document.querySelector('.main').appendChild(tableCard);
+    }
+
+    els.classChart = document.getElementById('classChart');
+    els.tableBody = document.getElementById('recordsTableBody');
 
     let filteredData = [...RAW_DATA];
     let weedChartInstance = null;
     let fieldChartInstance = null;
-    let currentSummaryFieldKey = null;
-    let latestFieldMetricsByKey = new Map();
+    let classChartInstance = null;
+    let currentSummaryFieldName = null;
+    let dashboardState = null;
+    let _pdfData = null;
 
     const avg = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
 
@@ -162,42 +195,124 @@
       [...selectEl.options].forEach(o => o.selected = false);
     }
 
-    function computeFieldMetrics(records) {
+    function computeWRSFromRecords(records) {
+      const weedBuckets = new Map();
+      for (const r of records) {
+        if (!weedBuckets.has(r.w)) weedBuckets.set(r.w, []);
+        weedBuckets.get(r.w).push(r.ps);
+      }
+      const weedAvgs = [...weedBuckets.values()].map(scores => avg(scores));
+      const avgPSByWeed = avg(weedAvgs);
+      const highPct = weedAvgs.length ? weedAvgs.filter(v => v >= 4).length / weedAvgs.length : 0;
+      return {
+        avgPSByWeed,
+        highPct,
+        wrs: (avgPSByWeed / 6 * 50) + (highPct * 50)
+      };
+    }
+
+    function groupByFieldName(records) {
       const byField = new Map();
       for (const r of records) {
-        const fieldKey = `${r.fi || r.f}__${r.fm}`;
-        if (!byField.has(fieldKey)) byField.set(fieldKey, []);
-        byField.get(fieldKey).push(r);
+        if (!byField.has(r.f)) byField.set(r.f, []);
+        byField.get(r.f).push(r);
       }
-      const out = [];
-      for (const [fieldKey, list] of byField.entries()) {
-        const field = list[0].f;
-        const weeds = new Map();
-        for (const rec of list) {
-          if (!weeds.has(rec.w)) weeds.set(rec.w, []);
-          weeds.get(rec.w).push(rec.ps);
-        }
-        const weedAvgs = [...weeds.values()].map(scores => avg(scores));
-        const avgPSByWeed = avg(weedAvgs);
-        const highPct = weedAvgs.length ? weedAvgs.filter(v => v >= 4).length / weedAvgs.length : 0;
-        const wrs = (avgPSByWeed / 6 * 50) + (highPct * 50);
-        out.push({
-          fieldKey,
-          field,
-          fieldLabel: `${field} (${list[0].fm})`,
-          wrs,
-          avgPS: avg(list.map(x => x.ps)),
-          highPct,
-          farm: list[0].fm,
-          area: list[0].ar,
-          years: [...new Set(list.map(x => x.yr))].sort((a,b)=>a-b),
-          crops: [...new Set(list.map(x => x.cr))],
-          scoutedBy: [...new Set(list.map(x => x.sb))],
-          recordCount: list.length,
-          records: list
+      return byField;
+    }
+
+    function computeFieldSummary(fieldName, records) {
+      const wrsMetrics = computeWRSFromRecords(records);
+      const weedGroups = new Map();
+      const yearGroups = new Map();
+
+      for (const rec of records) {
+        if (!weedGroups.has(rec.w)) weedGroups.set(rec.w, []);
+        weedGroups.get(rec.w).push(rec);
+
+        if (!yearGroups.has(rec.yr)) yearGroups.set(rec.yr, []);
+        yearGroups.get(rec.yr).push(rec);
+      }
+
+      const topWeeds = [...weedGroups.entries()]
+        .map(([name, recs]) => ({
+          name,
+          avgPS: avg(recs.map(x => x.ps)),
+          wc: recs[0].wc,
+        }))
+        .sort((a,b)=>b.avgPS-a.avgPS)
+        .slice(0,8);
+
+      const yearTrend = [...yearGroups.entries()]
+        .sort((a,b)=>a[0]-b[0])
+        .map(([year, recs]) => {
+          const y = computeWRSFromRecords(recs);
+          return { year, wrs: y.wrs, avgPS: avg(recs.map(x => x.ps)) };
         });
+
+      return {
+        fieldName,
+        fieldLabel: `${fieldName} (${records[0].fm})`,
+        farm: records[0].fm,
+        area: records[0].ar,
+        avgPS: avg(records.map(x => x.ps)),
+        ...wrsMetrics,
+        years: [...new Set(records.map(x => x.yr))].sort((a,b)=>a-b),
+        crops: [...new Set(records.map(x => x.cr))],
+        scoutedBy: [...new Set(records.map(x => x.sb))],
+        recordCount: records.length,
+        topWeeds,
+        yearTrend,
+        records
+      };
+    }
+
+    function computeDashboardState(records) {
+      const fields = groupByFieldName(records);
+      const summaries = [...fields.entries()].map(([fieldName, recs]) => computeFieldSummary(fieldName, recs));
+      const byFieldName = new Map(summaries.map(s => [s.fieldName, s]));
+
+      const weedMap = new Map();
+      for (const r of records) {
+        if (!weedMap.has(r.w)) weedMap.set(r.w, []);
+        weedMap.get(r.w).push(r.ps);
       }
-      return out;
+      const chart1Rows = [...weedMap.entries()]
+        .map(([weed, scores]) => ({ weed, avgPS: avg(scores) }))
+        .sort((a,b) => b.avgPS - a.avgPS)
+        .slice(0,20);
+
+      const chart2Rows = [...summaries].sort((a,b)=>b.wrs-a.wrs).slice(0,30);
+
+      const chart3Rows = summaries
+        .map(s => {
+          const broadleaf = s.records.filter(r => !String(r.wc).toLowerCase().includes('grass')).map(r => r.ps);
+          const grass = s.records.filter(r => String(r.wc).toLowerCase().includes('grass')).map(r => r.ps);
+          return {
+            fieldName: s.fieldName,
+            broadleaf: avg(broadleaf),
+            grass: avg(grass),
+            rank: Math.max(avg(broadleaf), avg(grass))
+          };
+        })
+        .sort((a,b)=>b.rank-a.rank)
+        .slice(0,25);
+
+      const tableRows = [...summaries].sort((a,b)=>b.wrs-a.wrs);
+
+      return {
+        summaries,
+        byFieldName,
+        kpis: {
+          fieldsScouted: new Set(records.map(r => r.f)).size,
+          avgPS: avg(records.map(r => r.ps)),
+          avgWRS: avg(summaries.map(s => s.wrs)),
+          uniqueWeeds: new Set(records.map(r => r.w)).size,
+        },
+        chart1Rows,
+        chart2Rows,
+        chart3Rows,
+        tableRows
+      };
     }
 
     function buildFilters() {
@@ -207,57 +322,20 @@
       fillSelect(els.weedClass, new Set(RAW_DATA.map(r => r.wc)));
     }
 
-    function applyFilters() {
-      const farmVals = optionValues(els.farm);
-      const yearVals = optionValues(els.year);
-      const cropVals = optionValues(els.crop);
-      const wcVals = optionValues(els.weedClass);
-
-      filteredData = RAW_DATA.filter(r =>
-        (!farmVals.length || farmVals.includes(r.fm)) &&
-        (!yearVals.length || yearVals.includes(String(r.yr))) &&
-        (!cropVals.length || cropVals.includes(r.cr)) &&
-        (!wcVals.length || wcVals.includes(r.wc))
-      );
-
-      updateKPIs();
-      updateWeedChart();
-      updateFieldChart();
-      syncSummaryPanelWithFilters();
+    function updateKPIs(state) {
+      els.kpiFields.textContent = state.kpis.fieldsScouted.toLocaleString();
+      els.kpiAvgPS.textContent = state.kpis.avgPS.toFixed(2);
+      els.kpiAvgWRS.textContent = state.kpis.avgWRS.toFixed(1);
+      els.kpiWeeds.textContent = state.kpis.uniqueWeeds.toLocaleString();
     }
 
-    function updateKPIs() {
-      const fields = new Set(filteredData.map(r => r.f));
-      const uniqueWeeds = new Set(filteredData.map(r => r.w));
-      const avgPS = avg(filteredData.map(r => r.ps));
-
-      // WRS formula copy #1 for KPI aggregation
-      const metrics = computeFieldMetrics(filteredData);
-      const avgWRS = avg(metrics.map(m => m.wrs));
-
-      els.kpiFields.textContent = fields.size.toLocaleString();
-      els.kpiAvgPS.textContent = avgPS.toFixed(2);
-      els.kpiAvgWRS.textContent = avgWRS.toFixed(1);
-      els.kpiWeeds.textContent = uniqueWeeds.size.toLocaleString();
-    }
-
-    function updateWeedChart() {
-      const weedMap = new Map();
-      for (const r of filteredData) {
-        if (!weedMap.has(r.w)) weedMap.set(r.w, []);
-        weedMap.get(r.w).push(r.ps);
-      }
-
-      const rows = [...weedMap.entries()].map(([weed,scores]) => ({weed, avgPS: avg(scores)}))
-        .sort((a,b) => b.avgPS - a.avgPS)
-        .slice(0,20);
-
+    function updateChart1(state) {
       if (weedChartInstance) weedChartInstance.destroy();
       weedChartInstance = new Chart(document.getElementById('weedChart'), {
         type: 'bar',
         data: {
-          labels: rows.map(r=>r.weed),
-          datasets: [{label:'Avg PS', data: rows.map(r=>r.avgPS), backgroundColor:'rgba(216,137,28,0.75)', borderRadius:6}]
+          labels: state.chart1Rows.map(r=>r.weed),
+          datasets: [{label:'Avg PS', data: state.chart1Rows.map(r=>r.avgPS), backgroundColor:'rgba(216,137,28,0.75)', borderRadius:6}]
         },
         options: {
           indexAxis:'y',
@@ -268,19 +346,13 @@
       });
     }
 
-    function updateFieldChart() {
-      // WRS formula copy #2 for field ranking chart
-      const metrics = computeFieldMetrics(filteredData)
-        .sort((a,b)=>b.wrs-a.wrs)
-        .slice(0,30);
-      latestFieldMetricsByKey = new Map(metrics.map(m => [m.fieldKey, m]));
-
+    function updateChart2(state) {
       if (fieldChartInstance) fieldChartInstance.destroy();
       fieldChartInstance = new Chart(document.getElementById('fieldChart'), {
         type:'bar',
         data: {
-          labels: metrics.map(m=>m.fieldLabel),
-          datasets: [{label:'WRS', data: metrics.map(m=>m.wrs), backgroundColor: metrics.map(m => m.wrs>60?'rgba(211,59,50,0.8)':m.wrs>30?'rgba(216,137,28,0.8)':'rgba(233,200,74,0.9)'), borderRadius:6}]
+          labels: state.chart2Rows.map(m=>m.fieldLabel),
+          datasets: [{label:'WRS', data: state.chart2Rows.map(m=>m.wrs), backgroundColor: state.chart2Rows.map(m => m.wrs>60?'rgba(211,59,50,0.8)':m.wrs>30?'rgba(216,137,28,0.8)':'rgba(233,200,74,0.9)'), borderRadius:6}]
         },
         options: {
           maintainAspectRatio:false,
@@ -289,21 +361,60 @@
           onClick: (_, elements) => {
             if (!elements.length) return;
             const idx = elements[0].index;
-            showFieldSummary(metrics[idx]);
+            showFieldSummary(state.chart2Rows[idx].fieldName);
           }
         }
       });
     }
 
-    function syncSummaryPanelWithFilters() {
-      if (!currentSummaryFieldKey) return;
-      const nextMetric = latestFieldMetricsByKey.get(currentSummaryFieldKey);
-      if (!nextMetric) {
-        currentSummaryFieldKey = null;
+    function updateChart3(state) {
+      if (classChartInstance) classChartInstance.destroy();
+      classChartInstance = new Chart(els.classChart, {
+        type:'bar',
+        data: {
+          labels: state.chart3Rows.map(r=>r.fieldName),
+          datasets: [
+            { label:'Broadleaf Avg PS', data: state.chart3Rows.map(r=>r.broadleaf), backgroundColor:'rgba(116,80,235,.62)', borderRadius:5 },
+            { label:'Grass Avg PS', data: state.chart3Rows.map(r=>r.grass), backgroundColor:'rgba(35,173,117,.62)', borderRadius:5 }
+          ]
+        },
+        options: {
+          indexAxis:'y',
+          maintainAspectRatio:false,
+          scales: {x:{min:0,max:6,grid:{color:'#eef2fa'}}, y:{grid:{display:false}}},
+          plugins:{legend:{position:'bottom'}}
+        }
+      });
+    }
+
+    function updateTable(state) {
+      const rows = state.tableRows.slice(0,100).map(row => `
+        <tr>
+          <td>${row.fieldName}</td>
+          <td>${row.farm}</td>
+          <td>${row.avgPS.toFixed(2)}</td>
+          <td>${row.wrs.toFixed(1)}</td>
+          <td>${(row.highPct * 100).toFixed(1)}%</td>
+          <td>${row.recordCount.toLocaleString()}</td>
+          <td><button class="close-btn" data-field="${row.fieldName}">View</button></td>
+        </tr>
+      `).join('');
+
+      els.tableBody.innerHTML = rows || '<tr><td colspan="7" class="empty">No rows for current filter selection.</td></tr>';
+      els.tableBody.querySelectorAll('button[data-field]').forEach(btn => {
+        btn.addEventListener('click', () => showFieldSummary(btn.dataset.field));
+      });
+    }
+
+    function syncSummaryPanelWithFilters(state) {
+      if (!currentSummaryFieldName) return;
+      if (!state.byFieldName.has(currentSummaryFieldName)) {
+        currentSummaryFieldName = null;
+        _pdfData = null;
         els.summaryPanel.classList.remove('open');
         return;
       }
-      showFieldSummary(nextMetric, false);
+      showFieldSummary(currentSummaryFieldName, false);
     }
 
     function classBadge(wc) {
@@ -311,42 +422,17 @@
       return `<span class="badge ${cls}">${wc}</span>`;
     }
 
-    function showFieldSummary(metric, shouldOpen = true) {
-      if (!metric) return;
-      currentSummaryFieldKey = metric.fieldKey;
+    function showFieldSummary(fieldName, shouldOpen = true) {
+      if (!dashboardState) return;
+      const fieldRecords = filteredData.filter(r => r.f === fieldName);
+      if (!fieldRecords.length) return;
+
+      const metric = computeFieldSummary(fieldName, fieldRecords);
+      currentSummaryFieldName = fieldName;
       const risk = getRiskClass(metric.wrs);
-      els.sumField.textContent = metric.field;
+
+      els.sumField.textContent = metric.fieldName;
       els.sumRisk.innerHTML = `<span class="badge risk-${risk}">${risk.toUpperCase()} RISK · WRS ${metric.wrs.toFixed(1)}</span>`;
-
-      const topWeeds = [...metric.records.reduce((m,r)=>{
-        if(!m.has(r.w)) m.set(r.w, []);
-        m.get(r.w).push(r);
-        return m;
-      }, new Map()).entries()]
-      .map(([name,recs])=>({
-        name,
-        avgPS: avg(recs.map(x=>x.ps)),
-        wc: recs[0].wc,
-      }))
-      .sort((a,b)=>b.avgPS-a.avgPS)
-      .slice(0,8);
-
-      const yearTrend = [...metric.records.reduce((m,r)=>{
-        if(!m.has(r.yr)) m.set(r.yr, []);
-        m.get(r.yr).push(r);
-        return m;
-      }, new Map()).entries()].sort((a,b)=>a[0]-b[0]).map(([year,recs])=>{
-        const weeds = new Map();
-        for (const rec of recs) {
-          if (!weeds.has(rec.w)) weeds.set(rec.w, []);
-          weeds.get(rec.w).push(rec.ps);
-        }
-        const weedAvgs = [...weeds.values()].map(v=>avg(v));
-        const avgPSByWeed = avg(weedAvgs);
-        const highPct = weedAvgs.length ? weedAvgs.filter(v=>v>=4).length / weedAvgs.length : 0;
-        const wrs = (avgPSByWeed / 6 * 50) + (highPct * 50);
-        return {year, wrs, avgPS: avg(recs.map(x=>x.ps))};
-      });
 
       els.summaryBody.innerHTML = `
         <div class="stats-grid">
@@ -363,7 +449,7 @@
         <div>
           <div class="section-title">Top Weeds by Pressure</div>
           <div class="weed-list">
-            ${topWeeds.map(w => `
+            ${metric.topWeeds.map(w => `
               <div class="weed-row">
                 <div>
                   <div class="meta"><strong>${w.name}</strong> ${classBadge(w.wc)}</div>
@@ -380,13 +466,56 @@
           <table class="trend-table">
             <thead><tr><th>Year</th><th>Avg PS</th><th>WRS</th></tr></thead>
             <tbody>
-              ${yearTrend.map(y => `<tr><td>${y.year}</td><td>${y.avgPS.toFixed(2)}</td><td>${y.wrs.toFixed(1)}</td></tr>`).join('')}
+              ${metric.yearTrend.map(y => `<tr><td>${y.year}</td><td>${y.avgPS.toFixed(2)}</td><td>${y.wrs.toFixed(1)}</td></tr>`).join('')}
             </tbody>
           </table>
         </div>
       `;
 
-      if (shouldOpen) els.summaryPanel.classList.add('open');
+      _pdfData = {
+        fieldName: metric.fieldName,
+        farm: metric.farm,
+        area: metric.area,
+        years: metric.years,
+        crops: metric.crops,
+        scoutedBy: metric.scoutedBy,
+        wrs: metric.wrs,
+        avgPS: metric.avgPS,
+        topWeeds: metric.topWeeds,
+        yearTrend: metric.yearTrend,
+        records: metric.records
+      };
+
+      if (shouldOpen) {
+        els.summaryPanel.classList.add('open');
+        els.summaryPanel.style.transform = 'translateX(0)';
+      }
+    }
+
+    function renderDashboard(state) {
+      updateKPIs(state);
+      updateChart1(state);
+      updateChart2(state);
+      updateChart3(state);
+      updateTable(state);
+      syncSummaryPanelWithFilters(state);
+    }
+
+    function applyFilters() {
+      const farmVals = optionValues(els.farm);
+      const yearVals = optionValues(els.year);
+      const cropVals = optionValues(els.crop);
+      const wcVals = optionValues(els.weedClass);
+
+      filteredData = RAW_DATA.filter(r =>
+        (!farmVals.length || farmVals.includes(r.fm)) &&
+        (!yearVals.length || yearVals.includes(String(r.yr))) &&
+        (!cropVals.length || cropVals.includes(r.cr)) &&
+        (!wcVals.length || wcVals.includes(r.wc))
+      );
+
+      dashboardState = computeDashboardState(filteredData);
+      renderDashboard(dashboardState);
     }
 
     document.getElementById('resetBtn').addEventListener('click', () => {
@@ -394,7 +523,8 @@
       applyFilters();
     });
     document.getElementById('closeSummary').addEventListener('click', () => {
-      currentSummaryFieldKey = null;
+      currentSummaryFieldName = null;
+      _pdfData = null;
       els.summaryPanel.classList.remove('open');
     });
     [els.farm, els.year, els.crop, els.weedClass].forEach(sel => sel.addEventListener('change', applyFilters));
