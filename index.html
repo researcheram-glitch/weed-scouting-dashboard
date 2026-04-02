@@ -141,6 +141,8 @@
     let filteredData = [...RAW_DATA];
     let weedChartInstance = null;
     let fieldChartInstance = null;
+    let currentSummaryFieldKey = null;
+    let latestFieldMetricsByKey = new Map();
 
     const avg = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
 
@@ -163,11 +165,13 @@
     function computeFieldMetrics(records) {
       const byField = new Map();
       for (const r of records) {
-        if (!byField.has(r.f)) byField.set(r.f, []);
-        byField.get(r.f).push(r);
+        const fieldKey = `${r.fi || r.f}__${r.fm}`;
+        if (!byField.has(fieldKey)) byField.set(fieldKey, []);
+        byField.get(fieldKey).push(r);
       }
       const out = [];
-      for (const [field, list] of byField.entries()) {
+      for (const [fieldKey, list] of byField.entries()) {
+        const field = list[0].f;
         const weeds = new Map();
         for (const rec of list) {
           if (!weeds.has(rec.w)) weeds.set(rec.w, []);
@@ -178,7 +182,9 @@
         const highPct = weedAvgs.length ? weedAvgs.filter(v => v >= 4).length / weedAvgs.length : 0;
         const wrs = (avgPSByWeed / 6 * 50) + (highPct * 50);
         out.push({
+          fieldKey,
           field,
+          fieldLabel: `${field} (${list[0].fm})`,
           wrs,
           avgPS: avg(list.map(x => x.ps)),
           highPct,
@@ -217,6 +223,7 @@
       updateKPIs();
       updateWeedChart();
       updateFieldChart();
+      syncSummaryPanelWithFilters();
     }
 
     function updateKPIs() {
@@ -266,12 +273,13 @@
       const metrics = computeFieldMetrics(filteredData)
         .sort((a,b)=>b.wrs-a.wrs)
         .slice(0,30);
+      latestFieldMetricsByKey = new Map(metrics.map(m => [m.fieldKey, m]));
 
       if (fieldChartInstance) fieldChartInstance.destroy();
       fieldChartInstance = new Chart(document.getElementById('fieldChart'), {
         type:'bar',
         data: {
-          labels: metrics.map(m=>m.field),
+          labels: metrics.map(m=>m.fieldLabel),
           datasets: [{label:'WRS', data: metrics.map(m=>m.wrs), backgroundColor: metrics.map(m => m.wrs>60?'rgba(211,59,50,0.8)':m.wrs>30?'rgba(216,137,28,0.8)':'rgba(233,200,74,0.9)'), borderRadius:6}]
         },
         options: {
@@ -287,13 +295,25 @@
       });
     }
 
+    function syncSummaryPanelWithFilters() {
+      if (!currentSummaryFieldKey) return;
+      const nextMetric = latestFieldMetricsByKey.get(currentSummaryFieldKey);
+      if (!nextMetric) {
+        currentSummaryFieldKey = null;
+        els.summaryPanel.classList.remove('open');
+        return;
+      }
+      showFieldSummary(nextMetric, false);
+    }
+
     function classBadge(wc) {
       const cls = String(wc).toLowerCase().includes('grass') ? 'weed-grass' : 'weed-broadleaf';
       return `<span class="badge ${cls}">${wc}</span>`;
     }
 
-    function showFieldSummary(metric) {
+    function showFieldSummary(metric, shouldOpen = true) {
       if (!metric) return;
+      currentSummaryFieldKey = metric.fieldKey;
       const risk = getRiskClass(metric.wrs);
       els.sumField.textContent = metric.field;
       els.sumRisk.innerHTML = `<span class="badge risk-${risk}">${risk.toUpperCase()} RISK · WRS ${metric.wrs.toFixed(1)}</span>`;
@@ -366,14 +386,17 @@
         </div>
       `;
 
-      els.summaryPanel.classList.add('open');
+      if (shouldOpen) els.summaryPanel.classList.add('open');
     }
 
     document.getElementById('resetBtn').addEventListener('click', () => {
       [els.farm, els.year, els.crop, els.weedClass].forEach(sel => [...sel.options].forEach(o => o.selected = false));
       applyFilters();
     });
-    document.getElementById('closeSummary').addEventListener('click', () => els.summaryPanel.classList.remove('open'));
+    document.getElementById('closeSummary').addEventListener('click', () => {
+      currentSummaryFieldKey = null;
+      els.summaryPanel.classList.remove('open');
+    });
     [els.farm, els.year, els.crop, els.weedClass].forEach(sel => sel.addEventListener('change', applyFilters));
 
     buildFilters();
