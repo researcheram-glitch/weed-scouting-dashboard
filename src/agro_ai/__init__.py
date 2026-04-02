@@ -1,11 +1,21 @@
-"""agro_ai package."""
+"""Backend utilities for the weed scouting dashboard."""
 
-from .io import read_scouting_csv
-from .risk import calculate_weed_risk_by_field
-from .viz_prep import prepare_field_risk_viz_data
+from .data_processing import (
+    DashboardData,
+    REQUIRED_COLUMNS,
+    aggregate_field_metrics,
+    aggregate_weed_metrics,
+    apply_filters,
+    build_dashboard_data,
+    load_scouting_data,
+)
 
 __all__ = [
-    "read_scouting_csv",
-    "calculate_weed_risk_by_field",
-    "prepare_field_risk_viz_data",
+    "DashboardData",
+    "REQUIRED_COLUMNS",
+    "load_scouting_data",
+    "apply_filters",
+    "aggregate_field_metrics",
+    "aggregate_weed_metrics",
+    "build_dashboard_data",
 ]
