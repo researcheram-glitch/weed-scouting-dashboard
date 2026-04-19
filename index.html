@@ -577,6 +577,13 @@
     }
 
     function getAvailableFilterOptions(filterKey) {
+      // Farm options must always be sourced from the full dataset so that
+      // every farm present in dashboard_data.js/RAW_DATA remains selectable.
+      if (filterKey === 'farm') {
+        const allFarmValues = new Set(RAW_DATA.map(record => getFilterRecordValue(record, filterKey)));
+        return sortFilterValues(allFarmValues, filterKey);
+      }
+
       const values = new Set();
       RAW_DATA.forEach(record => {
         if (matchAllFilters(record, filterState, filterKey)) {
