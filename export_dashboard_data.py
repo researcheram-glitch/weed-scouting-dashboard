@@ -127,6 +127,18 @@ def _cleanup_frame(frame: pd.DataFrame) -> pd.DataFrame:
             )
             cleaned[column] = cleaned[column].replace("", pd.NA)
 
+    # Normalize "empty-like" values in every required column.
+    # This catches cells that come from formulas returning "", non-breaking spaces, etc.
+    for column in REQUIRED_COLUMNS:
+        cleaned[column] = cleaned[column].apply(
+            lambda value: value.strip() if isinstance(value, str) else value
+        )
+        cleaned[column] = cleaned[column].replace(
+            to_replace=[r"^\s*$", ""],
+            value=pd.NA,
+            regex=True,
+        )
+
     # Remove rows where all required columns are empty (typical trailing Excel rows).
     cleaned = cleaned.dropna(subset=REQUIRED_COLUMNS, how="all")
 
