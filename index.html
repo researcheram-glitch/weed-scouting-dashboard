@@ -436,20 +436,20 @@
 
       els.summaryBody.innerHTML = `
         <div class="stats-grid">
+          <div class="stat"><div class="k">Field Name</div><div class="v">${metric.fieldName}</div></div>
+          <div class="stat"><div class="k">Weed Risk Score</div><div class="v">${metric.wrs.toFixed(1)}</div></div>
           <div class="stat"><div class="k">Avg Pressure</div><div class="v">${metric.avgPS.toFixed(2)}</div></div>
           <div class="stat"><div class="k">High Pressure %</div><div class="v">${(metric.highPct*100).toFixed(1)}%</div></div>
           <div class="stat"><div class="k">Farm</div><div class="v">${metric.farm}</div></div>
           <div class="stat"><div class="k">Area (ac)</div><div class="v">${(metric.area ?? 0).toFixed(1)}</div></div>
           <div class="stat"><div class="k">Years</div><div class="v">${metric.years.join(', ')}</div></div>
           <div class="stat"><div class="k">Crops</div><div class="v">${metric.crops.join(', ')}</div></div>
-          <div class="stat"><div class="k">Records</div><div class="v">${metric.recordCount.toLocaleString()}</div></div>
-          <div class="stat"><div class="k">Scouted By</div><div class="v">${metric.scoutedBy.join(', ')}</div></div>
         </div>
 
         <div>
           <div class="section-title">Top Weeds by Pressure</div>
           <div class="weed-list">
-            ${metric.topWeeds.map(w => `
+            ${metric.topWeeds.length ? metric.topWeeds.map(w => `
               <div class="weed-row">
                 <div>
                   <div class="meta"><strong>${w.name}</strong> ${classBadge(w.wc)}</div>
@@ -457,7 +457,7 @@
                 </div>
                 <div style="font-weight:700;font-size:12px">${w.avgPS.toFixed(2)}</div>
               </div>
-            `).join('')}
+            `).join('') : '<div class="empty">No weed pressure data for this field.</div>'}
           </div>
         </div>
 
