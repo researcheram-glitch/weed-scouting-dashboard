@@ -27,15 +27,44 @@
     .brand h1{margin:0;font-size:20px;font-weight:800}
     .brand p{margin:2px 0 0;font-size:12px;color:#cfd9ff}
     .header-actions{display:flex;gap:10px}
-    .reset-btn{border:1px solid #ced7ef;background:#fff;color:#2a3d7c;border-radius:10px;padding:8px 12px;font-weight:700;cursor:pointer}
+    .reset-btn{border:1px solid #c8d6f0;background:#fff;color:#2a3d7c;border-radius:10px;padding:8px 12px;font-weight:700;cursor:pointer;transition:border-color .18s ease, box-shadow .18s ease, transform .18s ease}
+    .reset-btn:hover{border-color:#a9bde8;box-shadow:0 6px 14px rgba(33,64,184,.12)}
+    .reset-btn:focus-visible{outline:none;border-color:#7598e5;box-shadow:0 0 0 3px rgba(33,64,184,.16)}
     .layout{display:block;padding:18px;max-width:1600px;margin:0 auto}
     .card,.chart-card,.top-controls{background:var(--panel-bg);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow)}
     .main{display:flex;flex-direction:column;gap:16px}
-    .top-controls{padding:12px 14px;display:flex;justify-content:space-between;align-items:flex-end;gap:14px}
-    .filters-row{display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:10px;flex:1}
+    .top-controls{
+      padding:16px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      background:#fcfdff;
+      border-color:#dbe4f2;
+      border-radius:14px;
+      box-shadow:0 12px 30px rgba(20,34,68,.09);
+    }
+    .filter-row{display:grid;gap:12px}
+    .filter-row-primary{grid-template-columns:repeat(2,minmax(220px,1fr))}
+    .filter-row-secondary{grid-template-columns:repeat(2,minmax(220px,1fr)) auto;align-items:end}
     .compact-filter{position:relative}
-    .filter-label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em}
-    .filter-trigger{width:100%;height:36px;border:1px solid var(--border);border-radius:10px;padding:0 11px;background:#fff;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+    .filter-label{display:block;font-size:11px;font-weight:700;color:#4b5563;margin-bottom:6px;text-transform:uppercase;letter-spacing:.09em}
+    .filter-trigger{
+      width:100%;
+      height:38px;
+      border:1px solid #d5dfef;
+      border-radius:10px;
+      padding:0 11px;
+      background:#fff;
+      color:var(--text);
+      font-size:13px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      cursor:pointer;
+      transition:border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+    }
+    .filter-trigger:hover{border-color:#b8c8e6;background:#fdfefe}
+    .filter-trigger:focus-visible{outline:none;border-color:#7598e5;box-shadow:0 0 0 3px rgba(33,64,184,.16)}
     .filter-trigger .value{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:92%}
     .filter-menu{position:absolute;top:64px;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 16px 36px rgba(20,34,68,.16);padding:10px;z-index:20;display:none}
     .compact-filter.open .filter-menu{display:block}
@@ -45,8 +74,14 @@
     .filter-option:hover{background:#f5f8ff}
     .filter-empty{font-size:12px;color:var(--muted);padding:4px 2px}
     .kpi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-    .card{padding:14px}
-    .card .label{font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.06em}
+    .card{
+      padding:14px;
+      background:#ffffff;
+      border:1px solid #dbe4f2;
+      border-radius:14px;
+      box-shadow:0 10px 24px rgba(20,34,68,.08);
+    }
+    .card .label{font-size:11px;color:#4b5563;text-transform:uppercase;font-weight:700;letter-spacing:.09em}
     .card .value{margin-top:10px;font-size:30px;font-weight:800;line-height:1;color:#111827}
     .chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
     .chart-card{padding:14px}
@@ -80,8 +115,16 @@
     .trend-table{width:100%;border-collapse:collapse;font-size:12px}
     .trend-table th,.trend-table td{padding:6px 5px;border-bottom:1px solid #eef2f8;text-align:left}
     .empty{color:var(--muted);font-size:13px;padding:18px 0}
-    @media (max-width:1200px){.filters-row{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.chart-grid{grid-template-columns:1fr}}
-    @media (max-width:760px){.top-controls{flex-direction:column}.filters-row{grid-template-columns:1fr}}
+    @media (max-width:1200px){
+      .filter-row-primary{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .filter-row-secondary{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .chart-grid{grid-template-columns:1fr}
+    }
+    @media (max-width:760px){
+      .filter-row-primary,.filter-row-secondary{grid-template-columns:1fr}
+      .filter-row-secondary .reset-btn{width:100%}
+    }
   </style>
 </head>
 <body>
@@ -96,7 +139,7 @@
   <div class="layout">
     <main class="main">
       <section class="top-controls">
-        <div class="filters-row">
+        <div class="filter-row filter-row-primary">
           <div class="compact-filter" data-filter-key="farm">
             <label class="filter-label">Farm</label>
             <button type="button" class="filter-trigger" id="farmFilterTrigger"><span class="value">All</span><span>▾</span></button>
@@ -113,6 +156,8 @@
               <div class="filter-options" id="yearFilterOptions"></div>
             </div>
           </div>
+        </div>
+        <div class="filter-row filter-row-secondary">
           <div class="compact-filter" data-filter-key="field">
             <label class="filter-label">Field</label>
             <button type="button" class="filter-trigger" id="fieldFilterTrigger"><span class="value">All</span><span>▾</span></button>
@@ -129,8 +174,8 @@
               <div class="filter-options" id="weedFilterOptions"></div>
             </div>
           </div>
+          <button id="resetBtn" class="reset-btn" type="button">Reset Filters</button>
         </div>
-        <button id="resetBtn" class="reset-btn" type="button">Reset Filters</button>
       </section>
 
       <section class="kpi-grid">
