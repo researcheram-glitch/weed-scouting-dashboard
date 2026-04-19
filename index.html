@@ -566,12 +566,17 @@
       });
     }
 
+    function closeSummaryPanel() {
+      currentSummaryFieldName = null;
+      _pdfData = null;
+      els.summaryPanel.classList.remove('open');
+      els.summaryPanel.style.removeProperty('transform');
+    }
+
     function syncSummaryPanelWithFilters(state) {
       if (!currentSummaryFieldName) return;
       if (!state.byFieldName.has(currentSummaryFieldName)) {
-        currentSummaryFieldName = null;
-        _pdfData = null;
-        els.summaryPanel.classList.remove('open');
+        closeSummaryPanel();
         return;
       }
       showFieldSummary(currentSummaryFieldName, false);
@@ -722,11 +727,7 @@
       renderAllFilters();
       applyFilters();
     });
-    document.getElementById('closeSummary').addEventListener('click', () => {
-      currentSummaryFieldName = null;
-      _pdfData = null;
-      els.summaryPanel.classList.remove('open');
-    });
+    document.getElementById('closeSummary').addEventListener('click', closeSummaryPanel);
     bindFilterEvents();
     els.weedChartView.addEventListener('change', (event) => {
       weedChartViewMode = event.target.value === 'all' ? 'all' : 'top10';
