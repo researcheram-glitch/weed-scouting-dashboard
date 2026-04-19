@@ -50,7 +50,9 @@
     .card .value{margin-top:10px;font-size:30px;font-weight:800;line-height:1;color:#111827}
     .chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
     .chart-card{padding:14px}
-    .chart-card h3{margin:0 0 10px;font-size:15px}
+    .chart-card h3{margin:0;font-size:15px}
+    .chart-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+    .chart-view-select{height:32px;border:1px solid var(--border);border-radius:8px;padding:0 8px;background:#fff;color:var(--text);font-size:12px;font-weight:600}
     .chart-canvas-wrap{position:relative;height:320px;width:100%;min-width:0}
     .hint{font-size:12px;color:var(--muted);margin-top:8px}
     .summary-panel{position:fixed;top:0;right:0;width:450px;max-width:95vw;height:100vh;background:#fff;border-left:1px solid var(--border);box-shadow:-18px 0 40px rgba(17,24,39,.15);transform:translateX(102%);transition:transform .28s ease;z-index:30;display:flex;flex-direction:column}
@@ -139,7 +141,13 @@
 
       <section class="chart-grid">
         <article class="chart-card">
-          <h3>Avg Pressure Score by Weed (Top 20)</h3>
+          <div class="chart-head">
+            <h3 id="weedChartTitle">Avg Pressure Score by Weed (Top 10)</h3>
+            <select id="weedChartView" class="chart-view-select" aria-label="Avg Pressure Score by Weed view mode">
+              <option value="top10">Top 10</option>
+              <option value="all">All</option>
+            </select>
+          </div>
           <div class="chart-canvas-wrap"><canvas id="weedChart"></canvas></div>
         </article>
         <article class="chart-card">
@@ -199,6 +207,8 @@
       summaryBody: document.getElementById('summaryBody'),
       sumField: document.getElementById('sumField'),
       sumRisk: document.getElementById('sumRisk'),
+      weedChartTitle: document.getElementById('weedChartTitle'),
+      weedChartView: document.getElementById('weedChartView'),
       classChart: document.getElementById('classChart'),
       tableBody: document.getElementById('recordsTableBody')
     };
@@ -210,6 +220,8 @@
     let currentSummaryFieldName = null;
     let dashboardState = null;
     let _pdfData = null;
+    const WEED_CHART_DEFAULT_LIMIT = 10;
+    let weedChartViewMode = 'top10';
 
     const avg = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
 
@@ -390,21 +402,22 @@
       };
     }
 
-    function computeTopWeeds(records, limit = 20) {
+    function computeTopWeeds(records, limit = null) {
       const weedGroups = new Map();
       for (const rec of records) {
         if (!weedGroups.has(rec.w)) weedGroups.set(rec.w, []);
         weedGroups.get(rec.w).push(rec);
       }
-      return [...weedGroups.entries()]
+      const rows = [...weedGroups.entries()]
         .map(([name, recs]) => ({
           name,
           avgPS: avg(recs.map(x => x.ps)),
           wc: recs[0]?.wc || '',
           count: recs.length
         }))
-        .sort((a,b)=>b.avgPS-a.avgPS)
-        .slice(0, limit);
+        .sort((a,b)=>b.avgPS-a.avgPS);
+      if (limit == null) return rows;
+      return rows.slice(0, limit);
     }
 
     function computeAvgWeedRiskScore(fieldSummaries) {
@@ -416,7 +429,9 @@
       const summaries = [...fields.entries()].map(([fieldName, recs]) => computeFieldSummary(fieldName, recs));
       const byFieldName = new Map(summaries.map(s => [s.fieldName, s]));
 
-      const chart1Rows = computeTopWeeds(records, 20).map(item => ({ weed: item.name, avgPS: item.avgPS }));
+      const allWeeds = computeTopWeeds(records, null);
+      const chart1Rows = (weedChartViewMode === 'all' ? allWeeds : allWeeds.slice(0, WEED_CHART_DEFAULT_LIMIT))
+        .map(item => ({ weed: item.name, avgPS: item.avgPS }));
 
       const chart2Rows = [...summaries].sort((a,b)=>b.wrs-a.wrs).slice(0,30);
 
@@ -462,8 +477,18 @@
     }
 
     function updateChart1(state) {
+      const titleSuffix = weedChartViewMode === 'all' ? 'All' : 'Top 10';
+      const rowCount = state.chart1Rows.length;
+      const dynamicHeight = weedChartViewMode === 'all'
+        ? Math.max(320, 80 + (rowCount * 28))
+        : 320;
+      const weedChartCanvas = document.getElementById('weedChart');
+      const weedChartWrap = weedChartCanvas.parentElement;
+      weedChartWrap.style.height = `${dynamicHeight}px`;
+
+      els.weedChartTitle.textContent = `Avg Pressure Score by Weed (${titleSuffix})`;
       if (weedChartInstance) weedChartInstance.destroy();
-      weedChartInstance = new Chart(document.getElementById('weedChart'), {
+      weedChartInstance = new Chart(weedChartCanvas, {
         type: 'bar',
         data: {
           labels: state.chart1Rows.map(r=>r.weed),
@@ -472,7 +497,10 @@
         options: {
           indexAxis:'y',
           maintainAspectRatio:false,
-          scales: {x: {min:0,max:6,grid:{color:'#eef2fa'}}, y: {grid:{display:false}}},
+          scales: {
+            x: {min:0,max:6,grid:{color:'#eef2fa'}},
+            y: {grid:{display:false}, ticks: {autoSkip: false}}
+          },
           plugins: {legend:{display:false}}
         }
       });
@@ -700,6 +728,10 @@
       els.summaryPanel.classList.remove('open');
     });
     bindFilterEvents();
+    els.weedChartView.addEventListener('change', (event) => {
+      weedChartViewMode = event.target.value === 'all' ? 'all' : 'top10';
+      applyFilters();
+    });
     buildFilters();
     applyFilters();
   </script>
