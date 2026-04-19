@@ -259,17 +259,22 @@ result = load_data(
     weed_classes=selected_weed_classes,
 )
 
-# Changed: custom KPI card row for stronger visual hierarchy.
-k1, k2, k3, k4 = st.columns(4)
+# Changed: KPI cards now align with required business metrics.
+k1, k2, k3 = st.columns(3)
+fields_scouted = result.filtered["Field"].nunique() if not result.filtered.empty else 0
+avg_ps = result.filtered["PressureScore"].mean() if not result.filtered.empty else 0
+avg_wrs = (
+    result.field_metrics["overall_weed_risk_score"].mean()
+    if not result.field_metrics.empty
+    else 0
+)
+
 with k1:
-    render_kpi_card("Observations", f"{len(result.filtered):,}")
+    render_kpi_card("Fields Scouted", f"{fields_scouted:,}")
 with k2:
-    render_kpi_card("Fields", f"{result.field_metrics['Field_ID'].nunique():,}")
+    render_kpi_card("Avg Pressure Score", f"{avg_ps:.2f}")
 with k3:
-    render_kpi_card("Unique Weeds", f"{result.filtered['Weed'].nunique():,}")
-with k4:
-    avg_ps = result.filtered["PressureScore"].mean() if not result.filtered.empty else 0
-    render_kpi_card("Avg PressureScore", f"{avg_ps:.2f}")
+    render_kpi_card("Avg Weed Risk Score", f"{avg_wrs:.2f}")
 
 c1, c2 = st.columns(2)
 
@@ -283,11 +288,11 @@ with c1:
         fig_fields = px.bar(
             top_fields,
             x="overall_weed_risk_score",
-            y="Field_ID",
+            y="Field",
             color="overall_weed_risk_score",
             color_continuous_scale=["#f4c542", "#f28c28", "#d7263d"],
             orientation="h",
-            labels={"overall_weed_risk_score": "Weed Risk Score", "Field_ID": "Field"},
+            labels={"overall_weed_risk_score": "Weed Risk Score", "Field": "Field"},
         )
         fig_fields.update_layout(height=390, margin=dict(l=8, r=8, t=8, b=8), coloraxis_showscale=False)
         st.plotly_chart(fig_fields, use_container_width=True)
@@ -321,7 +326,7 @@ else:
         result.field_metrics.groupby("Farm", as_index=False)
         .agg(
             avg_field_risk=("overall_weed_risk_score", "mean"),
-            fields=("Field_ID", "nunique"),
+            fields=("Field", "nunique"),
         )
         .sort_values("avg_field_risk", ascending=False)
     )
@@ -344,6 +349,8 @@ if result.field_metrics.empty:
     st.info("No field metrics available for selected filters.")
 else:
     display_table = result.field_metrics.copy()
+    # Prefer original field names in presentation; keep Field_ID out of the main table.
+    display_table = display_table.drop(columns=["Field_ID"], errors="ignore")
     display_table["RiskLevel"] = display_table["overall_weed_risk_score"].apply(risk_level).str.title()
     numeric_cols = ["avg_pressure_score", "max_pressure_score", "overall_weed_risk_score"]
     display_table[numeric_cols] = display_table[numeric_cols].round(2)
@@ -366,13 +373,16 @@ st.markdown('<div class="section-shell"><h3 class="chart-title">Interactive Fiel
 if result.field_metrics.empty:
     st.info("Select filters with available fields to view details.")
 else:
-    field_options = result.field_metrics[["Field_ID", "Field"]].drop_duplicates()
-    field_labels = [f"{row.Field_ID} — {row.Field}" for row in field_options.itertuples()]
-    selected_label = st.selectbox("Select a field", field_labels)
-    selected_field_id = selected_label.split(" — ")[0]
+    field_options = (
+        result.field_metrics[["Field"]]
+        .dropna()
+        .drop_duplicates()
+        .sort_values("Field")
+    )
+    selected_field_name = st.selectbox("Select a field", field_options["Field"].tolist())
 
-    field_rows = result.filtered[result.filtered["Field_ID"] == selected_field_id].copy()
-    field_summary = result.field_metrics[result.field_metrics["Field_ID"] == selected_field_id].iloc[0]
+    field_rows = result.filtered[result.filtered["Field"] == selected_field_name].copy()
+    field_summary = result.field_metrics[result.field_metrics["Field"] == selected_field_name].iloc[0]
     level = risk_level(float(field_summary["overall_weed_risk_score"]))
 
     risk_badge = as_badge(level.title(), f"risk-badge risk-{level}")
@@ -388,7 +398,6 @@ else:
     with info_left:
         st.markdown("**Field Profile**")
         st.write(f"**Field:** {field_summary['Field']}")
-        st.write(f"**Field ID:** {field_summary['Field_ID']}")
         st.write(f"**Farm:** {field_summary['Farm']}")
         st.write(f"**Crop:** {field_summary['Crop']}")
 
