@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 REQUIRED_COLUMNS = [
@@ -127,11 +126,32 @@ def aggregate_field_metrics(frame: pd.DataFrame) -> pd.DataFrame:
         )
     )
 
-    aggregated["overall_weed_risk_score"] = (
-        0.5 * aggregated["avg_pressure_score"]
-        + 0.3 * aggregated["max_pressure_score"]
-        + 0.1 * aggregated["unique_weed_species_count"]
-        + 0.1 * np.log1p(aggregated["total_observations"])
+    # Weed Risk Score (WRS) formula:
+    # Step 1: per (Field_ID, Weed) average PressureScore
+    # Step 2: avgPS(field) = average of per-weed averages
+    # Step 3: High%(field) = share of weed species with avgPS >= 4
+    # Step 4: WRS = (avgPS / 6 * 50) + (High% * 50)
+    weed_level = (
+        frame.groupby(["Field_ID", "Weed"], as_index=False)
+        .agg(weed_avg_ps=("PressureScore", "mean"))
+    )
+
+    wrs_by_field = (
+        weed_level.groupby("Field_ID", as_index=False)
+        .agg(
+            avg_ps_by_weed=("weed_avg_ps", "mean"),
+            high_pct=("weed_avg_ps", lambda s: (s >= 4).mean()),
+        )
+    )
+    wrs_by_field["overall_weed_risk_score"] = (
+        (wrs_by_field["avg_ps_by_weed"] / 6.0) * 50.0
+        + (wrs_by_field["high_pct"] * 50.0)
+    )
+
+    aggregated = aggregated.merge(
+        wrs_by_field[["Field_ID", "overall_weed_risk_score"]],
+        on="Field_ID",
+        how="left",
     )
 
     return aggregated.sort_values("overall_weed_risk_score", ascending=False)
