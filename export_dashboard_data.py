@@ -8,6 +8,7 @@ our HTML dashboard.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -90,10 +91,20 @@ def _compact_record(row: pd.Series) -> dict[str, object]:
     }
 
 
+def write_dashboard_data_js(records: list[dict[str, object]], output_path: Path = OUTPUT_JS) -> None:
+    """Write compact records to dashboard_data.js using dashboard-compatible format."""
+    payload = "const RAW_DATA = " + json.dumps(
+        records,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ) + ";\n"
+    output_path.write_text(payload, encoding="utf-8")
+
+
 def main() -> int:
-    """Run export pipeline and print maintenance guidance."""
+    """Run export pipeline from Excel to dashboard_data.js."""
     if not SOURCE_XLSX.exists():
-        print("Missing file: data/scouting_master.xlsx")
+        print("ERROR: Missing input file: data/scouting_master.xlsx")
         return 1
 
     # 1) Read directly from Excel (no CSV conversion step)
@@ -102,7 +113,10 @@ def main() -> int:
     # 2) Validate required columns early with a clear message
     missing_columns = [column for column in REQUIRED_COLUMNS if column not in frame.columns]
     if missing_columns:
-        print("Missing required columns: " + ", ".join(missing_columns))
+        print("ERROR: Missing required columns in data/scouting_master.xlsx:")
+        for column in missing_columns:
+            print(f"  - {column}")
+        print("Export aborted. dashboard_data.js was not updated.")
         return 1
 
     # 3) Keep only required columns for a stable transformation surface
@@ -110,20 +124,17 @@ def main() -> int:
 
     # 4) Convert each row to the compact RAW_DATA schema used by dashboard logic
     records = [_compact_record(row) for _, row in frame.iterrows()]
+    unique_fields_exported = frame["Field"].astype(str).str.strip().nunique()
 
-    # 5) Preserve JS output shape consumed by HTML dashboard
-    OUTPUT_JS.write_text(
-        "const RAW_DATA = " + json.dumps(records, ensure_ascii=False, separators=(",", ":")) + ";\n",
-        encoding="utf-8",
-    )
+    # 5) Overwrite output every successful run
+    write_dashboard_data_js(records, OUTPUT_JS)
 
-    # 6) End-of-run operator guidance (requested)
-    print(f"Source file: {SOURCE_XLSX}")
-    print("Required columns: " + ", ".join(REQUIRED_COLUMNS))
-    print(
-        "Refresh steps: update data/scouting_master.xlsx, run `python export_dashboard_data.py`, "
-        "then reload the HTML dashboard."
-    )
+    # 6) Success summary
+    now_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    print("dashboard_data.js updated")
+    print(f"rows exported: {len(records)}")
+    print(f"unique fields exported: {unique_fields_exported}")
+    print(f"timestamp: {now_utc}")
 
     return 0
 
