@@ -31,7 +31,7 @@
     .layout{display:block;padding:18px;max-width:1600px;margin:0 auto}
     .card,.chart-card,.top-controls{background:var(--panel-bg);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow)}
     .main{display:flex;flex-direction:column;gap:16px}
-    .top-controls{padding:12px 14px;display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+    .top-controls{padding:12px 14px;display:flex;justify-content:space-between;align-items:flex-end;gap:14px}
     .filters-row{display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:10px;flex:1}
     .compact-filter{position:relative}
     .filter-label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em}
@@ -44,13 +44,14 @@
     .filter-option{display:flex;align-items:center;gap:7px;font-size:12px;padding:4px 2px;border-radius:6px}
     .filter-option:hover{background:#f5f8ff}
     .filter-empty{font-size:12px;color:var(--muted);padding:4px 2px}
-    .kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+    .kpi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
     .card{padding:14px}
     .card .label{font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.06em}
     .card .value{margin-top:10px;font-size:30px;font-weight:800;line-height:1;color:#111827}
-    .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
     .chart-card{padding:14px}
     .chart-card h3{margin:0 0 10px;font-size:15px}
+    .chart-canvas-wrap{position:relative;height:320px;width:100%;min-width:0}
     .hint{font-size:12px;color:var(--muted);margin-top:8px}
     .summary-panel{position:fixed;top:0;right:0;width:450px;max-width:95vw;height:100vh;background:#fff;border-left:1px solid var(--border);box-shadow:-18px 0 40px rgba(17,24,39,.15);transform:translateX(102%);transition:transform .28s ease;z-index:30;display:flex;flex-direction:column}
     .summary-panel.open{transform:translateX(0)}
@@ -134,18 +135,33 @@
         <div class="card"><div class="label">Fields Scouted</div><div class="value" id="kpiFields">0</div></div>
         <div class="card"><div class="label">Avg Pressure Score</div><div class="value" id="kpiAvgPS">0</div></div>
         <div class="card"><div class="label">Avg Weed Risk Score</div><div class="value" id="kpiAvgWRS">0</div></div>
-        <div class="card"><div class="label">Unique Weeds</div><div class="value" id="kpiWeeds">0</div></div>
       </section>
 
       <section class="chart-grid">
         <article class="chart-card">
           <h3>Avg Pressure Score by Weed (Top 20)</h3>
-          <canvas id="weedChart" height="315"></canvas>
+          <div class="chart-canvas-wrap"><canvas id="weedChart"></canvas></div>
         </article>
         <article class="chart-card">
           <h3>Weed Risk Score by Field (Top 30)</h3>
-          <canvas id="fieldChart" height="315"></canvas>
+          <div class="chart-canvas-wrap"><canvas id="fieldChart"></canvas></div>
           <div class="hint">Click a field bar to open summary panel.</div>
+        </article>
+        <article class="chart-card" style="grid-column:1/-1;">
+          <h3>Avg Pressure by Field and Weed Class (Top 25)</h3>
+          <div class="chart-canvas-wrap"><canvas id="classChart"></canvas></div>
+        </article>
+      </section>
+
+      <section>
+        <article class="chart-card">
+          <h3>Field Ranking Table (Filtered)</h3>
+          <div style="overflow:auto;max-height:340px;border:1px solid #e8edf8;border-radius:10px;">
+            <table class="trend-table" id="recordsTable" style="min-width:780px;">
+              <thead><tr><th>Field</th><th>Farm</th><th>Avg PS</th><th>WRS</th><th>High %</th><th>Records</th><th>Action</th></tr></thead>
+              <tbody id="recordsTableBody"></tbody>
+            </table>
+          </div>
         </article>
       </section>
     </main>
@@ -179,43 +195,13 @@
       kpiFields: document.getElementById('kpiFields'),
       kpiAvgPS: document.getElementById('kpiAvgPS'),
       kpiAvgWRS: document.getElementById('kpiAvgWRS'),
-      kpiWeeds: document.getElementById('kpiWeeds'),
       summaryPanel: document.getElementById('summaryPanel'),
       summaryBody: document.getElementById('summaryBody'),
       sumField: document.getElementById('sumField'),
       sumRisk: document.getElementById('sumRisk'),
-      chartGrid: document.querySelector('.chart-grid')
+      classChart: document.getElementById('classChart'),
+      tableBody: document.getElementById('recordsTableBody')
     };
-
-    // Add missing UI blocks without changing the existing visual language.
-    if (!document.getElementById('classChart')) {
-      const chart3Card = document.createElement('article');
-      chart3Card.className = 'chart-card';
-      chart3Card.innerHTML = `
-        <h3>Avg Pressure by Field and Weed Class (Top 25)</h3>
-        <canvas id="classChart" height="315"></canvas>
-      `;
-      els.chartGrid.appendChild(chart3Card);
-    }
-
-    if (!document.getElementById('recordsTableBody')) {
-      const tableCard = document.createElement('article');
-      tableCard.className = 'chart-card';
-      tableCard.style.marginTop = '14px';
-      tableCard.innerHTML = `
-        <h3>Field Ranking Table (Filtered)</h3>
-        <div style="overflow:auto;max-height:340px;border:1px solid #e8edf8;border-radius:10px;">
-          <table class="trend-table" id="recordsTable" style="min-width:780px;">
-            <thead><tr><th>Field</th><th>Farm</th><th>Avg PS</th><th>WRS</th><th>High %</th><th>Records</th><th>Action</th></tr></thead>
-            <tbody id="recordsTableBody"></tbody>
-          </table>
-        </div>
-      `;
-      document.querySelector('.main').appendChild(tableCard);
-    }
-
-    els.classChart = document.getElementById('classChart');
-    els.tableBody = document.getElementById('recordsTableBody');
 
     let filteredData = [...RAW_DATA];
     let weedChartInstance = null;
@@ -372,25 +358,13 @@
 
     function computeFieldSummary(fieldName, records) {
       const wrsMetrics = computeWRSFromRecords(records);
-      const weedGroups = new Map();
       const yearGroups = new Map();
 
       for (const rec of records) {
-        if (!weedGroups.has(rec.w)) weedGroups.set(rec.w, []);
-        weedGroups.get(rec.w).push(rec);
-
         if (!yearGroups.has(rec.yr)) yearGroups.set(rec.yr, []);
         yearGroups.get(rec.yr).push(rec);
       }
-
-      const topWeeds = [...weedGroups.entries()]
-        .map(([name, recs]) => ({
-          name,
-          avgPS: avg(recs.map(x => x.ps)),
-          wc: recs[0].wc,
-        }))
-        .sort((a,b)=>b.avgPS-a.avgPS)
-        .slice(0,8);
+      const topWeeds = computeTopWeeds(records, 8);
 
       const yearTrend = [...yearGroups.entries()]
         .sort((a,b)=>a[0]-b[0])
@@ -401,7 +375,7 @@
 
       return {
         fieldName,
-        fieldLabel: `${fieldName} (${records[0].fm})`,
+        fieldLabel: fieldName,
         farm: records[0].fm,
         area: records[0].ar,
         avgPS: avg(records.map(x => x.ps)),
@@ -416,20 +390,33 @@
       };
     }
 
+    function computeTopWeeds(records, limit = 20) {
+      const weedGroups = new Map();
+      for (const rec of records) {
+        if (!weedGroups.has(rec.w)) weedGroups.set(rec.w, []);
+        weedGroups.get(rec.w).push(rec);
+      }
+      return [...weedGroups.entries()]
+        .map(([name, recs]) => ({
+          name,
+          avgPS: avg(recs.map(x => x.ps)),
+          wc: recs[0]?.wc || '',
+          count: recs.length
+        }))
+        .sort((a,b)=>b.avgPS-a.avgPS)
+        .slice(0, limit);
+    }
+
+    function computeAvgWeedRiskScore(fieldSummaries) {
+      return avg(fieldSummaries.map(s => s.wrs));
+    }
+
     function computeDashboardState(records) {
       const fields = groupByFieldName(records);
       const summaries = [...fields.entries()].map(([fieldName, recs]) => computeFieldSummary(fieldName, recs));
       const byFieldName = new Map(summaries.map(s => [s.fieldName, s]));
 
-      const weedMap = new Map();
-      for (const r of records) {
-        if (!weedMap.has(r.w)) weedMap.set(r.w, []);
-        weedMap.get(r.w).push(r.ps);
-      }
-      const chart1Rows = [...weedMap.entries()]
-        .map(([weed, scores]) => ({ weed, avgPS: avg(scores) }))
-        .sort((a,b) => b.avgPS - a.avgPS)
-        .slice(0,20);
+      const chart1Rows = computeTopWeeds(records, 20).map(item => ({ weed: item.name, avgPS: item.avgPS }));
 
       const chart2Rows = [...summaries].sort((a,b)=>b.wrs-a.wrs).slice(0,30);
 
@@ -455,8 +442,7 @@
         kpis: {
           fieldsScouted: new Set(records.map(r => r.f)).size,
           avgPS: avg(records.map(r => r.ps)),
-          avgWRS: avg(summaries.map(s => s.wrs)),
-          uniqueWeeds: new Set(records.map(r => r.w)).size,
+          avgWRS: computeAvgWeedRiskScore(summaries),
         },
         chart1Rows,
         chart2Rows,
@@ -473,7 +459,6 @@
       els.kpiFields.textContent = state.kpis.fieldsScouted.toLocaleString();
       els.kpiAvgPS.textContent = state.kpis.avgPS.toFixed(2);
       els.kpiAvgWRS.textContent = state.kpis.avgWRS.toFixed(1);
-      els.kpiWeeds.textContent = state.kpis.uniqueWeeds.toLocaleString();
     }
 
     function updateChart1(state) {
