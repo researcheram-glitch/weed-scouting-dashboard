@@ -34,6 +34,30 @@ REQUIRED_COLUMNS = [
     "ScoutedBy",
 ]
 
+# Columns that define whether a row has real scouting business data.
+BUSINESS_COLUMNS = [
+    "Field_ID",
+    "Field",
+    "Farm",
+    "Year",
+    "Crop",
+    "Weed",
+    "WeedClass",
+    "Pressure",
+]
+
+# Text columns that should be trimmed before emptiness checks/export.
+TEXT_COLUMNS = [
+    "Field_ID",
+    "Field",
+    "Farm",
+    "Crop",
+    "Weed",
+    "WeedClass",
+    "Pressure",
+    "ScoutedBy",
+]
+
 # Pressure text -> score mapping used by existing KPI/chart logic
 PRESSURE_TO_SCORE = {
     "very light": 1,
@@ -91,6 +115,30 @@ def _compact_record(row: pd.Series) -> dict[str, object]:
     }
 
 
+def _cleanup_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    """Drop trailing/blank rows and rows missing key business columns."""
+    cleaned = frame.copy()
+
+    # Normalize text columns first so whitespace-only cells become truly empty.
+    for column in TEXT_COLUMNS:
+        if column in cleaned.columns:
+            cleaned[column] = cleaned[column].apply(
+                lambda value: value.strip() if isinstance(value, str) else value
+            )
+            cleaned[column] = cleaned[column].replace("", pd.NA)
+
+    # Remove rows where all required columns are empty (typical trailing Excel rows).
+    cleaned = cleaned.dropna(subset=REQUIRED_COLUMNS, how="all")
+
+    # Treat Year as empty when it cannot be parsed.
+    business_view = cleaned[BUSINESS_COLUMNS].copy()
+    business_view["Year"] = pd.to_numeric(business_view["Year"], errors="coerce")
+    business_empty_mask = business_view.isna().all(axis=1)
+    cleaned = cleaned.loc[~business_empty_mask].copy()
+
+    return cleaned
+
+
 def write_dashboard_data_js(records: list[dict[str, object]], output_path: Path = OUTPUT_JS) -> None:
     """Write compact records to dashboard_data.js using dashboard-compatible format."""
     payload = "const RAW_DATA = " + json.dumps(
@@ -109,6 +157,7 @@ def main() -> int:
 
     # 1) Read directly from Excel (no CSV conversion step)
     frame = pd.read_excel(SOURCE_XLSX)
+    rows_read = len(frame)
 
     # 2) Validate required columns early with a clear message
     missing_columns = [column for column in REQUIRED_COLUMNS if column not in frame.columns]
@@ -121,6 +170,8 @@ def main() -> int:
 
     # 3) Keep only required columns for a stable transformation surface
     frame = frame[REQUIRED_COLUMNS].copy()
+    frame = _cleanup_frame(frame)
+    rows_kept = len(frame)
 
     # 4) Convert each row to the compact RAW_DATA schema used by dashboard logic
     records = [_compact_record(row) for _, row in frame.iterrows()]
@@ -132,6 +183,8 @@ def main() -> int:
     # 6) Success summary
     now_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
     print("dashboard_data.js updated")
+    print(f"rows read from Excel: {rows_read}")
+    print(f"rows kept after cleanup: {rows_kept}")
     print(f"rows exported: {len(records)}")
     print(f"unique fields exported: {unique_fields_exported}")
     print(f"timestamp: {now_utc}")
