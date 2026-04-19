@@ -146,10 +146,10 @@
     }
     .modal-backdrop.open{display:flex}
     .kpi-info-modal{
-      width:min(560px,100%);
+      width:min(760px,100%);
       background:#fff;
       border:1px solid #dbe4f2;
-      border-radius:14px;
+      border-radius:16px;
       box-shadow:0 22px 48px rgba(15,23,42,.22);
       overflow:hidden;
     }
@@ -157,29 +157,65 @@
       display:flex;
       justify-content:space-between;
       align-items:center;
-      padding:14px 16px;
+      padding:14px 18px;
       border-bottom:1px solid #e5eaf3;
       background:#f9fbff;
     }
-    .kpi-info-modal-head h3{margin:0;font-size:16px}
-    .kpi-info-modal-body{padding:16px;display:flex;flex-direction:column;gap:12px}
+    .kpi-info-title{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .kpi-info-icon{
+      width:28px;
+      height:28px;
+      border-radius:8px;
+      border:1px solid #d4def1;
+      background:#eef3ff;
+      color:#2140b8;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font-size:15px;
+      font-weight:700;
+      flex-shrink:0;
+    }
+    .kpi-info-modal-head h3{margin:0;font-size:18px}
+    .kpi-info-modal-body{padding:18px;display:flex;flex-direction:column;gap:14px;max-height:min(78vh,760px);overflow:auto}
+    .kpi-info-section{
+      border:1px solid #e8edf8;
+      background:#fcfdff;
+      border-radius:12px;
+      padding:12px;
+    }
     .kpi-info-modal-body h4{
-      margin:0 0 4px;
+      margin:0 0 8px;
       font-size:11px;
       text-transform:uppercase;
-      letter-spacing:.08em;
-      color:#6b7280;
+      letter-spacing:.1em;
+      color:#5a6782;
     }
-    .kpi-info-modal-body p{margin:0;font-size:14px;line-height:1.5}
+    .kpi-info-modal-body p{margin:0;font-size:14px;line-height:1.6}
+    .kpi-info-lines{display:flex;flex-direction:column;gap:8px}
+    .kpi-info-list{display:flex;flex-direction:column;gap:8px}
+    .kpi-info-list-row{
+      display:grid;
+      grid-template-columns:minmax(136px, 160px) 1fr;
+      gap:10px;
+      font-size:14px;
+      line-height:1.5;
+    }
+    .kpi-info-list-row strong{font-weight:700;color:#172554}
+    .kpi-info-list-row span{color:#334155}
     .kpi-formula{
       margin:0;
-      background:#f8faff;
-      border:1px solid #e4eaf8;
+      background:#f2f6ff;
+      border:1px solid #d9e3f7;
       border-radius:10px;
-      padding:10px 12px;
+      padding:12px 14px;
       font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-      font-size:12px;
-      line-height:1.45;
+      font-size:12.5px;
+      line-height:1.55;
       color:#1f2937;
       white-space:pre-wrap;
     }
@@ -317,20 +353,13 @@
   <div class="modal-backdrop" id="kpiInfoModalBackdrop" aria-hidden="true">
     <div class="kpi-info-modal" role="dialog" aria-modal="true" aria-labelledby="kpiInfoTitle">
       <div class="kpi-info-modal-head">
-        <h3 id="kpiInfoTitle">KPI Info</h3>
+        <div class="kpi-info-title">
+          <span id="kpiInfoIcon" class="kpi-info-icon" aria-hidden="true">ℹ</span>
+          <h3 id="kpiInfoTitle">KPI Info</h3>
+        </div>
         <button class="close-btn" id="closeKpiInfoModal" type="button">Close ✕</button>
       </div>
-      <div class="kpi-info-modal-body">
-        <div>
-          <h4>Meaning</h4>
-          <p id="kpiInfoMeaning"></p>
-        </div>
-        <div>
-          <h4>Calculation</h4>
-          <p id="kpiInfoCalculation"></p>
-          <pre class="kpi-formula" id="kpiInfoFormula"></pre>
-        </div>
-      </div>
+      <div class="kpi-info-modal-body" id="kpiInfoBody"></div>
     </div>
   </div>
 
@@ -356,10 +385,9 @@
       kpiAvgWRS: document.getElementById('kpiAvgWRS'),
       kpiInfoButtons: [...document.querySelectorAll('[data-kpi-info]')],
       kpiInfoModalBackdrop: document.getElementById('kpiInfoModalBackdrop'),
+      kpiInfoIcon: document.getElementById('kpiInfoIcon'),
       kpiInfoTitle: document.getElementById('kpiInfoTitle'),
-      kpiInfoMeaning: document.getElementById('kpiInfoMeaning'),
-      kpiInfoCalculation: document.getElementById('kpiInfoCalculation'),
-      kpiInfoFormula: document.getElementById('kpiInfoFormula'),
+      kpiInfoBody: document.getElementById('kpiInfoBody'),
       summaryPanel: document.getElementById('summaryPanel'),
       summaryBody: document.getElementById('summaryBody'),
       sumField: document.getElementById('sumField'),
@@ -381,22 +409,118 @@
     let weedChartViewMode = 'top10';
     const KPI_INFO_CONTENT = {
       fieldsScouted: {
+        icon: '🌾',
         title: 'Fields Scouted',
-        meaning: 'Number of unique fields in the current filtered dataset.',
-        calculation: 'Count of distinct original field names after all active filters are applied.',
-        formula: 'fieldsScouted = new Set(filteredData.map(r => r.f)).size'
+        sections: [
+          {
+            heading: 'WHAT IT SHOWS',
+            type: 'paragraphs',
+            content: [
+              'The number of unique fields in the current selection, based on active filters (Farm, Year, Field, Weed).'
+            ]
+          },
+          {
+            heading: 'HOW IT IS CALCULATED',
+            type: 'formula',
+            formula: 'Fields Scouted = COUNT(unique field names)',
+            content: [
+              'If the same field was scouted multiple times (different years or weed species), it is counted only once.'
+            ]
+          },
+          {
+            heading: 'HOW TO READ IT',
+            type: 'paragraphs',
+            content: [
+              'When a single farm is selected, this shows how many of its fields are in the current selection.',
+              'When filtered by year, it shows how many fields were scouted that year.'
+            ]
+          },
+          {
+            heading: 'EXAMPLE',
+            type: 'paragraphs',
+            content: [
+              'If the filters are set to year 2025 and farm D&C Farms Ltd, the card shows only the fields of that farm scouted in 2025.'
+            ]
+          }
+        ]
       },
       avgPS: {
+        icon: '⚖',
         title: 'Avg Pressure Score',
-        meaning: 'Average weed pressure across the current filtered dataset.',
-        calculation: 'Mean of Pressure Score values from the filtered records.',
-        formula: 'avgPS = sum(filteredData.ps) / filteredData.length'
+        sections: [
+          {
+            heading: 'WHAT IT SHOWS',
+            type: 'paragraphs',
+            content: [
+              'The average weed pressure across all records in the current selection. Reflects the overall weed load on the selected fields.'
+            ]
+          },
+          {
+            heading: 'PRESSURE SCORE SCALE',
+            type: 'list',
+            items: [
+              { label: '1 — Very Light', value: 'Isolated plants, no meaningful threat' },
+              { label: '2 — Light', value: 'Low density, minimal yield impact' },
+              { label: '3 — Moderate', value: 'Noticeable presence, requires monitoring' },
+              { label: '4 — Heavy', value: 'High density, yield losses likely' },
+              { label: '5 — Very Heavy', value: 'Very high density, significant yield losses' },
+              { label: '6 — Heavy Patches', value: 'Dense localised patches, requires urgent intervention' }
+            ]
+          },
+          {
+            heading: 'HOW IT IS CALCULATED',
+            type: 'formula',
+            formula: 'Avg PS = SUM of all PS values / COUNT of all records',
+            content: [
+              'Simple average across all rows — each record (one field × one weed × one visit) carries equal weight.'
+            ]
+          },
+          {
+            heading: 'HOW TO READ IT',
+            type: 'paragraphs',
+            content: [
+              'Value below 2.0 — overall pressure is low.',
+              'Value 2.0–3.0 — moderate, requires attention.',
+              'Value above 3.0 — high pressure, action needed.'
+            ]
+          }
+        ]
       },
       avgWRS: {
-        title: 'Avg Weed Risk Score',
-        meaning: 'Composite field-level weed risk indicator used to prioritize field attention.',
-        calculation: 'For each field: group records by weed, average each weed pressure score, compute field average across weeds, compute share of weeds with avgPS >= 4, then WRS = (avgPSByWeed / 6 * 50) + (highPct * 50). Dashboard KPI is the average of all visible field WRS values.',
-        formula: 'Field WRS = (avgPSByWeed / 6 * 50) + (highPct * 50)\nwhere:\n- avgPSByWeed = avg( avg(ps) per unique weed )\n- highPct = count(weeds with avgPS >= 4) / unique weed count\nAvg WRS KPI = avg(fieldWRS for filtered fields)'
+        icon: '🧪',
+        title: 'Weed Risk Score (WRS)',
+        sections: [
+          {
+            heading: 'WHAT IT SHOWS',
+            type: 'paragraphs',
+            content: [
+              'A composite risk index on a scale of 0–100. It captures not just average pressure but also the share of high-pressure weed species. Displayed as the average WRS across all fields in the current selection.'
+            ]
+          },
+          {
+            heading: 'FORMULA — 5 STEPS',
+            type: 'formula',
+            formula: 'Step 1: For each (Field + Weed) pair → average the PS values\n        (one weed species per field = one averaged value)\n\nStep 2: avgPS (field) = average of all per-weed averages\n\nStep 3: High% = share of weed species with avgPS ≥ 4\n        denominator = number of unique weed species in THIS field\n\nStep 4: WRS = (avgPS / 6 × 50) + (High% × 50)\n\nStep 5: Avg WRS = mean WRS across all fields in selection'
+          },
+          {
+            heading: 'RISK ZONES',
+            type: 'list',
+            items: [
+              { label: '0–30   Low', value: 'Monitor — field is under control' },
+              { label: '30–60  Moderate', value: 'Manage — active herbicide program needed' },
+              { label: '60–100 High', value: 'Action required — high risk of yield loss' }
+            ]
+          },
+          {
+            heading: 'WHY NOT JUST USE AVG PS?',
+            type: 'paragraphs',
+            content: [
+              'Avg PS does not reveal the structure of pressure.',
+              'A field with 5 moderate weeds and a field with 4 light + 1 very heavy weed can have the same Avg PS — but the second field is agronomically more dangerous.',
+              'WRS identifies such fields through the High% component.'
+            ]
+          }
+        ]
       }
     };
 
@@ -750,14 +874,32 @@
       els.summaryPanel.style.removeProperty('transform');
     }
 
+    function renderKpiInfoSections(sections = []) {
+      return sections.map(section => {
+        const heading = `<h4>${section.heading}</h4>`;
+        const lines = (section.content || []).map(line => `<p>${line}</p>`).join('');
+        const paragraphs = lines ? `<div class="kpi-info-lines">${lines}</div>` : '';
+        const formula = section.formula ? `<pre class="kpi-formula">${section.formula}</pre>` : '';
+        const list = section.type === 'list'
+          ? `<div class="kpi-info-list">${
+            (section.items || []).map(item => `
+              <div class="kpi-info-list-row">
+                <strong>${item.label}</strong>
+                <span>${item.value}</span>
+              </div>
+            `).join('')
+          }</div>`
+          : '';
+        return `<section class="kpi-info-section">${heading}${list}${formula}${paragraphs}</section>`;
+      }).join('');
+    }
+
     function openKpiInfoModal(kpiKey) {
       const content = KPI_INFO_CONTENT[kpiKey];
       if (!content) return;
+      els.kpiInfoIcon.textContent = content.icon || 'ℹ';
       els.kpiInfoTitle.textContent = content.title;
-      els.kpiInfoMeaning.textContent = content.meaning;
-      els.kpiInfoCalculation.textContent = content.calculation;
-      els.kpiInfoFormula.textContent = content.formula || '';
-      els.kpiInfoFormula.style.display = content.formula ? 'block' : 'none';
+      els.kpiInfoBody.innerHTML = renderKpiInfoSections(content.sections);
       els.kpiInfoModalBackdrop.classList.add('open');
       els.kpiInfoModalBackdrop.setAttribute('aria-hidden', 'false');
     }
